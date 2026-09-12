@@ -130,6 +130,7 @@ Mentor clinic 2 (15:15–16:15): one person, 20 min, ask Souradip about (a) anyt
 1. Agentic coordinator (stretch) — never start it before 17:00. 2. SQLite store for approvals (in-memory is fine for the demo). 3. Equipment as its own lane (fold into community referral). 4. `repeat` runs in evals. 5. Live "Reset" (pre-seeded worlds are enough). 6. Blocker triage LLM (hard-code the escalation text). Never cut: letter approval yield, A/B replay, evals tab, video.
 
 ## 9. Risks
+- **The shared sim goes down.** At 15:20 BST `https://sim.animahacks.com/healthz` returned 502 for several minutes (16 teams on one instance; our own 4-way concurrent writes may add load). The client retries 5xx with backoff, but the demo must not depend on the sim being up: the UI's attract loop replays `data/ab-run.json`, and the video is recorded early. Keep writes ≤ 4 concurrent per world and prefer fewer, larger clock advances.
 - **Write latency (20 s)** — mitigated by 4-way concurrency, one write per job per tick, pre-recorded A/B run, replay in UI. Do not put sim writes on the UI thread of the demo; show progress.
 - 409 on community capacity (only 4 slots) — this is a feature (blocker story); handle it, don't crash.
 - World creation ~1–2 min — create the demo worlds by 16:30, keep the suffix in `.worlds.json`, do not recreate during the stall.

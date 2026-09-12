@@ -92,6 +92,8 @@ Action `type` enum (all sites; the engine rejects types not valid at that site/s
 
 ## Latency and limits (measured)
 
+- **Outages happen.** 15:20 BST: `/healthz` and every API route returned 502 (body empty) for several minutes. Our client retries reads and writes on 5xx/transport errors (4 attempts, exponential backoff); actions are safe to retry because of the Idempotency-Key. Cache reads per tick and keep a replay of a recorded run for the demo.
+
 - World creation: slow (minutes). Reads: sub-second to a few seconds; the unfiltered GP view is slow and huge — never call it in a loop. Actions: ~1–3 s each. Budget for it in demo loops; parallelise across patients where safe (different resources), never race on the same resource version.
 - JSON bodies ≤ 65,536 bytes. Resource views page at 500. Adapters return at most 100 workflow resources.
 - No rate limit documented, but be polite: cache reads per tick.
