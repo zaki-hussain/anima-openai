@@ -20,7 +20,7 @@ NHS 10-Year Plan: Ch.2 hospital→community (discharge named explicitly), Ch.3 a
 | Receive letter, follow-up | GP practice | `process_document assign/review/file` + `create_task` follow-up → `accept` | letter `filed`, task `accepted` |
 | **Free the bed** | ward | `update_attendance hospitalCommand: discharge` once all needed jobs are done | attendance `discharged` |
 
-Two hard constraints discovered: **sim writes take ~15–20 s each** (reads ~1 s; writes parallelise across patients: 4 concurrent finished in 14 s), and **clock advance takes ~22 s**. Design everything around that (section 3.7).
+Two operational facts discovered: **sim writes and clock advances take ~3 s when the instance is healthy but degrade to 15–22 s under load, and the shared instance briefly returned 502s at 15:20 BST** (reads stay ~1 s). Design for the slow case and for outages (section 3.7 and 9).
 
 We do **not** need another organiser key: `POST /api/keys {"teamName": …}` mints isolated worlds with identical seeds. Baseline world and agent world are two names.
 
@@ -90,7 +90,7 @@ One tick = (1) advance the world clock by `tickMinutes` (60 for batch runs, 30 f
 - `scripts/seed.ts`: identical cohort of 8 inpatients in both worlds: SIM-000007, SIM-000008 (already inpatient), SIM-000005 + SIM-000006 (take → `admit`), SIM-000001 (waiting → `assign/assess/refer/admit`; the sim's flagship delayed-discharge patient with bed r-47 "barrier: medicines and home monitoring"), SIM-000009…011 (`register_attendance` → … → `admit`). ~30 writes/world, ~3 min with 4-way concurrency. Mark `fitAt = clock.now` at seed time.
 - **Baseline ("today's ward") model** (`backend/src/baseline/manualWard.ts`): same runners, but each team only looks at its inbox every `pollMinutes` (pharmacy 180, lab review 240, community 480, equipment 720, letter 480 = end of shift, GP 1440 = next day, ward round 120 for the actual discharge), jobs start sequentially (letter after labs back; TTO and GP after letter; community/equipment after the nurse sees the letter), and each poll drops the ball with p=0.25 (seeded RNG, re-noticed next poll). Parameters are *illustrative* and labelled as such in the UI.
 - **Agent world**: all needed jobs start at tick 0 in parallel; bounded by lab 120 + visit 90 sim-min and the approval click.
-- Cost of a full run: 8 patients × ~14 writes = ~110 writes per world ≈ 110/4 × 17 s ≈ 8 min, plus 24 ticks × 22 s ≈ 9 min of clock advances per world, worlds in parallel → **~15–20 min for a 24-sim-hour A/B run**. So: run it once at ~17:00, save `data/ab-run.json`, the UI **replays** it at 30× for the attract loop, and judges can also press "Advance 1 hour" live on the agent world.
+- Cost of a full run: 8 patients × ~14 writes = ~110 writes per world plus 24 clock advances. Healthy sim (~3 s per write, 4-way concurrent): **~3–5 min for a 24-sim-hour A/B run**; loaded sim (15–22 s per write): ~15–20 min. So: run it as soon as the engine works (target 16:45), save `data/ab-run.json`, the UI **replays** it at 30× for the attract loop, and judges can also press "Advance 1 hour" live on the agent world. Re-run for fresh numbers only if the sim is healthy.
 
 ## 4. Evals and metrics (shown in the UI "Evidence" tab)
 
@@ -131,7 +131,7 @@ Mentor clinic 2 (15:15–16:15): one person, 20 min, ask Souradip about (a) anyt
 
 ## 9. Risks
 - **The shared sim goes down.** At 15:20 BST `https://sim.animahacks.com/healthz` returned 502 for several minutes (16 teams on one instance; our own 4-way concurrent writes may add load). The client retries 5xx with backoff, but the demo must not depend on the sim being up: the UI's attract loop replays `data/ab-run.json`, and the video is recorded early. Keep writes ≤ 4 concurrent per world and prefer fewer, larger clock advances.
-- **Write latency (20 s)** — mitigated by 4-way concurrency, one write per job per tick, pre-recorded A/B run, replay in UI. Do not put sim writes on the UI thread of the demo; show progress.
+- **Write latency (3 s healthy, up to 20 s under load)** — mitigated by 4-way concurrency, one write per job per tick, pre-recorded A/B run, replay in UI. Do not put sim writes on the UI thread of the demo; show progress.
 - 409 on community capacity (only 4 slots) — this is a feature (blocker story); handle it, don't crash.
 - World creation ~1–2 min — create the demo worlds by 16:30, keep the suffix in `.worlds.json`, do not recreate during the stall.
 - OpenAI rate/latency — planner and triage on `gpt-5.4-mini`; cache plans per patient on disk.
