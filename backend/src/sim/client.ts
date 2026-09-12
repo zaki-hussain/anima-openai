@@ -54,11 +54,24 @@ export class SimClient {
     return { Authorization: `Bearer ${this.key}`, 'Content-Type': 'application/json', ...extra }
   }
 
-  async get<T>(path: string): Promise<T> {
-    const res = await fetch(`${this.origin}${path}`, { headers: this.headers() })
-    const body = await res.json().catch(() => null)
-    if (!res.ok) throw new SimError(res.status, body, path)
-    return body as T
+  /** GET with retries on transport errors and 5xx (reads are safe to repeat). */
+  async get<T>(path: string, attempts = 4): Promise<T> {
+    let lastErr: unknown
+    for (let i = 0; i < attempts; i++) {
+      try {
+        const res = await fetch(`${this.origin}${path}`, { headers: this.headers() })
+        const body = await res.json().catch(() => null)
+        if (res.ok) return body as T
+        const err = new SimError(res.status, body, path)
+        if (res.status < 500) throw err
+        lastErr = err
+      } catch (err) {
+        if (err instanceof SimError && err.status < 500) throw err
+        lastErr = err
+      }
+      await new Promise((r) => setTimeout(r, 2000 * 2 ** i))
+    }
+    throw lastErr
   }
 
   /**
