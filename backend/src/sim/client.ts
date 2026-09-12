@@ -61,11 +61,27 @@ export class SimClient {
     return body as T
   }
 
-  private async post<T>(path: string, body: unknown, extra: Record<string, string> = {}): Promise<T> {
-    const res = await fetch(`${this.origin}${path}`, { method: 'POST', headers: this.headers(extra), body: JSON.stringify(body) })
-    const out = await res.json().catch(() => null)
-    if (!res.ok) throw new SimError(res.status, out, path)
-    return out as T
+  /**
+   * POST with retries on transport errors and 5xx (the sim returns occasional 502s under concurrent writes).
+   * Safe because every action carries an Idempotency-Key: an identical retry returns the original result.
+   */
+  private async post<T>(path: string, body: unknown, extra: Record<string, string> = {}, attempts = 4): Promise<T> {
+    let lastErr: unknown
+    for (let i = 0; i < attempts; i++) {
+      try {
+        const res = await fetch(`${this.origin}${path}`, { method: 'POST', headers: this.headers(extra), body: JSON.stringify(body) })
+        const out = await res.json().catch(() => null)
+        if (res.ok) return out as T
+        const err = new SimError(res.status, out, path)
+        if (res.status < 500) throw err
+        lastErr = err
+      } catch (err) {
+        if (err instanceof SimError && err.status < 500) throw err
+        lastErr = err
+      }
+      await new Promise((r) => setTimeout(r, 3000 * 2 ** i))
+    }
+    throw lastErr
   }
 
   // ---- reads (fast, ~1 s) ----
