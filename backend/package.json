@@ -1,0 +1,22 @@
+{
+  "name": "dischargeflow-backend",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "smoke": "tsx scripts/smoke.ts",
+    "worlds:create": "tsx scripts/worlds.ts",
+    "seed": "tsx scripts/seed.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@animahealth/adk": "0.6.0",
+    "openai": "^5",
+    "zod": "^3.25"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "tsx": "^4",
+    "typescript": "^5"
+  }
+}
